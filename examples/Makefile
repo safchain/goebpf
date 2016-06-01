@@ -1,10 +1,15 @@
 LLC ?= llc
 CLANG ?= clang
 
-test_pbf: test_bpf.o
+all: test_bpf test_ft
+
+test_pbf: ../goebpf.go test_bpf.go test_bpf.o
 	go build ./test_bpf.go
 
-test_bpf.o: test_bpf.c
+test_ft: ../goebpf.go test_ft.go test_ft.o
+	go build ./test_ft.go
+
+%.o: %.c
 	$(CLANG) \
 		-D__KERNEL__ -D__ASM_SYSREG_H -Wno-unused-value -Wno-pointer-sign \
 		-Wno-compare-distinct-pointer-types \

@@ -39,5 +39,17 @@ static int (*bpf_map_update_element)(void *map, void *key, void *value,
   unsigned long long flags) = (void *) BPF_FUNC_map_update_elem;
 static int (*bpf_map_delete_element)(void *map, void *key) =
   (void *) BPF_FUNC_map_delete_elem;
+static unsigned long long (*bpf_ktime_get_ns)(void) =
+  (void *) BPF_FUNC_ktime_get_ns;
+static int (*bpf_trace_printk)(const char *fmt, int fmt_size, ...) =
+  (void *) BPF_FUNC_trace_printk;
+static void (*bpf_tail_call)(void *ctx, void *map, int index) =
+  (void *) BPF_FUNC_tail_call;
+static unsigned long long (*bpf_get_smp_processor_id)(void) =
+  (void *) BPF_FUNC_get_smp_processor_id;
+static unsigned long long (*bpf_get_current_pid_tgid)(void) =
+  (void *) BPF_FUNC_get_current_pid_tgid;
+static unsigned long long (*bpf_get_current_uid_gid)(void) =
+  (void *) BPF_FUNC_get_current_uid_gid;
 
 #endif

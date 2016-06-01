@@ -25,20 +25,16 @@ func main() {
 
 	fmt.Println(string(b.Log()))
 
-	fd, err := b.Attach("lo")
+	fd, err := b.Attach("eth0")
 	if err != nil {
 		panic(err)
 	}
 
-	for i := 0; i != 5; i++ {
-		key := uint32(1)
-		var value uint64
+	for i := 0; i != 50; i++ {
+		value := make([]byte, 300)
 
-		b.Map("first").Lookup(&key, &value)
-		fmt.Printf("First map value: %d\n", value)
-
-		b.Map("second").Lookup([]byte("abc"), &value)
-		fmt.Printf("Second map value: %d\n", value)
+		b.Map("second").Lookup([]byte("abc"), value)
+		fmt.Printf("Second map value: %v\n", value)
 
 		time.Sleep(1 * time.Second)
 	}

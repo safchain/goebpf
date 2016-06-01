@@ -127,6 +127,27 @@ static int bpf_prog_load(enum bpf_prog_type prog_type,
 	return syscall(__NR_bpf, BPF_PROG_LOAD, &attr, sizeof(attr));
 }
 
+int bpf_delete_element(int fd, void *key)
+{
+	union bpf_attr attr = {
+		.map_fd = fd,
+		.key = ptr_to_u64(key)
+	};
+
+	return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr)) == 0;
+}
+
+int bpf_get_next_key(int fd, void *key, void *next_key)
+{
+	union bpf_attr attr = {
+		.map_fd = fd,
+		.key = ptr_to_u64(key),
+		.next_key = ptr_to_u64(next_key),
+	};
+
+	return syscall(__NR_bpf, BPF_MAP_GET_NEXT_KEY, &attr, sizeof(attr)) == 0;
+}
+
 int bpf_lookup_element(int fd, void *key, void *value)
 {
 	union bpf_attr attr = {
@@ -198,6 +219,11 @@ type BPFMap struct {
 	m    *C.bpf_map
 }
 
+type BPFMapIterator struct {
+	key interface{}
+	m   *BPFMap
+}
+
 // BPFMap represents a eBPF program.
 type BPFProg struct {
 	file     *elf.File
@@ -252,6 +278,34 @@ func (m *BPFMap) Lookup(key interface{}, value interface{}) bool {
 	}
 
 	return true
+}
+
+// Iterator returns a BPFMapIterator
+func (m *BPFMap) Iterator() *BPFMapIterator {
+	return &BPFMapIterator{
+		key: make([]byte, m.KeySize()),
+		m:   m,
+	}
+}
+
+// Next returns the next key, value of the BPFMap, returns true when
+// the next element has been found, false otherwise.
+func (i *BPFMapIterator) Next(key interface{}, value interface{}) bool {
+	k := reflect.ValueOf(i.key)
+	nk := reflect.ValueOf(key)
+
+	ret := C.bpf_get_next_key(i.m.m.fd, unsafe.Pointer(k.Pointer()), unsafe.Pointer(nk.Pointer()))
+	if ret == 0 {
+		return false
+	}
+
+	found := i.m.Lookup(key, value)
+	if found {
+		i.key = key
+		return true
+	}
+
+	return false
 }
 
 // Attach attaches the eBPF program to the given interface.

@@ -71,22 +71,23 @@ static int bpf_create_map(enum bpf_map_type map_type, int key_size,
 	return syscall(__NR_bpf, BPF_MAP_CREATE, &attr, sizeof(attr));
 }
 
-static bpf_map *bpf_load_map(bpf_map_def *map_def,
-	int size)
+static bpf_map *bpf_load_map(bpf_map_def *map_def, int max)
 {
 	bpf_map *map;
 
 	map = calloc(1, sizeof(bpf_map));
-	if (map == NULL) {
+	if (map == NULL)
 		return NULL;
-	}
 
 	memcpy(&map->def, map_def, sizeof(bpf_map_def));
+
+	if (max == 0)
+		max = map_def->max_entries;
 
 	map->fd = bpf_create_map(map_def->type,
 		map_def->key_size,
 		map_def->value_size,
-		map_def->max_entries
+		max
 	);
 
 	if (map->fd < 0)
@@ -226,11 +227,14 @@ type BPFMapIterator struct {
 
 // BPFMap represents a eBPF program.
 type BPFProg struct {
-	file     *elf.File
-	fd       int
-	prog_map *BPFMap
-	maps     map[string]*BPFMap
-	log      []byte
+	file                  *elf.File
+	fd                    int
+	prog_map              *BPFMap
+	maps                  map[string]*BPFMap
+	log                   []byte
+	verifierLogLevel      int
+	mapsDefaultMaxEntries int
+	mapsMaxEntries        map[string]int
 }
 
 // Release releases the memory allocated by a BPFProg.
@@ -433,12 +437,18 @@ func (b *BPFProg) readMaps() error {
 				return err
 			}
 
-			cm := C.bpf_load_map((*C.bpf_map_def)(unsafe.Pointer(&data[0])), C.int(section.Size))
+			name := strings.TrimPrefix(section.Name, "maps/")
+
+			maxEntries := b.mapsMaxEntries[name]
+			if maxEntries == 0 {
+				maxEntries = b.mapsDefaultMaxEntries
+			}
+
+			cm := C.bpf_load_map((*C.bpf_map_def)(unsafe.Pointer(&data[0])), C.int(maxEntries))
 			if cm == nil {
 				return fmt.Errorf("Error while loading map %s", section.Name)
 			}
 
-			name := strings.TrimPrefix(section.Name, "maps/")
 			m := &BPFMap{Name: name, m: cm}
 
 			if m.Type() == BPF_MAP_TYPE_PROG_ARRAY {
@@ -558,7 +568,25 @@ func (b *BPFProg) Map(name string) *BPFMap {
 	return b.maps[name]
 }
 
-// NewBPFProg loads a elf eBPF binary and returns a new BPFProg.
+// Load loads the elf eBPF binary
+func (b *BPFProg) Load() error {
+	if err := b.load(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// SetDefaultMaxEntries sets the default max_entries for all the maps
+// that will be loaded, if not defined the value
+func (b *BPFProg) SetDefaultMaxEntries(max int) {
+	b.mapsDefaultMaxEntries = max
+}
+
+func (b *BPFProg) SetMaxEntries(table string, max int) {
+	b.mapsMaxEntries[table] = max
+}
+
+// NewBPFProg returns a new BPFProg
 func NewBPFProg(r io.ReaderAt) (*BPFProg, error) {
 	f, err := elf.NewFile(r)
 	if err != nil {
@@ -566,13 +594,10 @@ func NewBPFProg(r io.ReaderAt) (*BPFProg, error) {
 	}
 
 	b := &BPFProg{
-		file: f,
-		maps: make(map[string]*BPFMap),
-		log:  make([]byte, 65536),
-	}
-
-	if err = b.load(); err != nil {
-		return b, err
+		file:           f,
+		maps:           make(map[string]*BPFMap),
+		log:            make([]byte, 65536),
+		mapsMaxEntries: make(map[string]int),
 	}
 
 	return b, nil

@@ -284,6 +284,22 @@ func (m *BPFMap) Lookup(key interface{}, value interface{}) bool {
 	return true
 }
 
+// Delete deletes the map entry for the given key.
+func (m *BPFMap) Delete(key interface{}) bool {
+	if m == nil {
+		return false
+	}
+
+	k := reflect.ValueOf(key)
+
+	ret := C.bpf_delete_element(m.m.fd, unsafe.Pointer(k.Pointer()))
+	if ret == 0 {
+		return false
+	}
+
+	return true
+}
+
 // Iterator returns a BPFMapIterator
 func (m *BPFMap) Iterator() *BPFMapIterator {
 	return &BPFMapIterator{

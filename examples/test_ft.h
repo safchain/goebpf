@@ -20,6 +20,7 @@ struct network_layer {
 };
 
 struct transport_layer {
+	__u8   protocol;
 	__be16 port_src;
 	__be16 port_dst;
 };
@@ -40,7 +41,7 @@ struct flow {
 	struct flow_key   key;
 	struct flow_stats stats;
 
-	__u64             first;
+	__u64             start;
 	__u64             last;
 };
 

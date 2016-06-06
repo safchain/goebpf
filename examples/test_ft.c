@@ -6,8 +6,6 @@
 #include <linux/if_packet.h>
 #include <linux/ip.h>
 #include <linux/in.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
 #include <linux/bpf.h>
 
 #include "../libbpf.h"
@@ -20,34 +18,21 @@ struct bpf_map_def MAP("flow_table") flow_table = {
 	.max_entries = 256,
 };
 
-static void fill_transport_tcp(struct __sk_buff *skb, int offset,
+static void fill_transport(struct __sk_buff *skb, __u8 protocol, int offset,
 	struct flow_key *key)
 {
 	struct transport_layer *layer = &key->transport_layer;
 
-	layer->port_src = load_half(skb, offset + offsetof(struct tcphdr, source));
-	layer->port_dst = load_half(skb, offset + offsetof(struct tcphdr, source));
+	layer->protocol = protocol;
+	layer->port_src = load_half(skb, offset);
+	layer->port_dst = load_half(skb, offset + sizeof(__be16));
 }
 
-static void fill_transport_tcp_stats(struct __sk_buff *skb, int offset,
+static void update_transport_stats(struct __sk_buff *skb, int offset,
 	struct flow_stats *stats)
 {
-	/* TODO */
-}
-
-static void fill_transport_udp(struct __sk_buff *skb, int offset,
-	struct flow_key *key)
-{
-	struct transport_layer *layer = &key->transport_layer;
-
-	layer->port_src = load_half(skb, offset + offsetof(struct udphdr, source));
-	layer->port_dst = load_half(skb, offset + offsetof(struct udphdr, source));
-}
-
-static void fill_transport_udp_stats(struct __sk_buff *skb, int offset,
-	struct flow_stats *stats)
-{
-	/* TODO */
+	__sync_fetch_and_add(&stats->transport_layer.packets, 1);
+	__sync_fetch_and_add(&stats->transport_layer.bytes, skb->len - offset);
 }
 
 static void fill_network(struct __sk_buff *skb, int offset,
@@ -58,23 +43,24 @@ static void fill_network(struct __sk_buff *skb, int offset,
 	layer->ip_src = load_word(skb, offset + offsetof(struct iphdr, saddr));
 	layer->ip_dst = load_word(skb, offset + offsetof(struct iphdr, daddr));
 
-	__u32 proto = load_byte(skb, offset + offsetof(struct iphdr, protocol));
+	__u8 protocol = load_byte(skb, offset + offsetof(struct iphdr, protocol));
 
 	__u8 verlen = load_byte(skb, offset);
 	offset += (verlen & 0xF) << 2;
 
-	switch (proto) {
+	switch (protocol) {
 		case IPPROTO_TCP:
-			fill_transport_tcp(skb, offset, key);
 		case IPPROTO_UDP:
-			fill_transport_udp(skb, offset, key);
+		case IPPROTO_SCTP:
+			fill_transport(skb, protocol, offset, key);
 	}
 }
 
-static void fill_network_stats(struct __sk_buff *skb, int offset,
+static void update_network_stats(struct __sk_buff *skb, int offset,
 	struct flow_stats *stats)
 {
-	/* TODO */
+	__sync_fetch_and_add(&stats->network_layer.packets, 1);
+	__sync_fetch_and_add(&stats->network_layer.bytes, skb->len - offset);
 
 	__u32 proto = load_byte(skb, offset + offsetof(struct iphdr, protocol));
 
@@ -83,9 +69,9 @@ static void fill_network_stats(struct __sk_buff *skb, int offset,
 
 	switch (proto) {
 		case IPPROTO_TCP:
-			fill_transport_tcp_stats(skb, offset, stats);
 		case IPPROTO_UDP:
-			fill_transport_udp_stats(skb, offset, stats);
+		case IPPROTO_SCTP:
+			update_transport_stats(skb, offset, stats);
 	}
 }
 
@@ -108,21 +94,21 @@ static void fill_link(struct __sk_buff *skb, int offset, struct flow_key *key)
 	_fill_haddr(skb, offset + offsetof(struct ethhdr, h_dest), layer->mac_dst);
 }
 
-static void fill_link_stats(struct __sk_buff *skb, int offset,
+static void update_link_stats(struct __sk_buff *skb, int offset,
 	struct flow_stats *stats)
 {
 	__sync_fetch_and_add(&stats->link_layer.packets, 1);
 	__sync_fetch_and_add(&stats->link_layer.bytes, skb->len);
 }
 
-static void fill_stats(struct __sk_buff *skb, struct flow_stats *stats)
+static void update_stats(struct __sk_buff *skb, struct flow_stats *stats)
 {
-	fill_link_stats(skb, 0, stats);
+	update_link_stats(skb, 0, stats);
 
 	__u32 proto = load_half(skb, offsetof(struct ethhdr, h_proto));
 	switch (proto) {
 	case ETH_P_IP:
-		fill_network_stats(skb, ETH_HLEN, stats);
+		update_network_stats(skb, ETH_HLEN, stats);
 	}
 }
 
@@ -135,15 +121,6 @@ static void fill_key(struct __sk_buff *skb, struct flow_key *key)
 	case ETH_P_IP:
 		fill_network(skb, ETH_HLEN, key);
 	}
-}
-
-static void fill_flow(struct __sk_buff *skb, struct flow *flow)
-{
-	fill_key(skb, &flow->key);
-	fill_stats(skb, &flow->stats);
-
-	flow->first = bpf_ktime_get_ns();
-	flow->last = bpf_ktime_get_ns();
 }
 
 SOCKET("test")
@@ -159,11 +136,12 @@ int bpf_test(struct __sk_buff *skb)
 
 	prev = bpf_map_lookup_element(&flow_table, &flow.key);
 	if (prev) {
-		fill_stats(skb, &prev->stats);
-		prev->first = tm;
+		update_stats(skb, &prev->stats);
+		prev->last = tm;
 	} else {
-		fill_stats(skb, &flow.stats);
-		flow.first = tm;
+		update_stats(skb, &flow.stats);
+		flow.start = tm;
+		flow.last = tm;
 
 		bpf_map_update_element(&flow_table, &flow.key, &flow, BPF_ANY);
 	}

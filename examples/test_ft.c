@@ -11,7 +11,7 @@
 #include "../libbpf.h"
 #include "test_ft.h"
 
-struct bpf_map_def MAP("flow_table") flow_table = {
+MAP(flow_table) {
 	.type = BPF_MAP_TYPE_HASH,
 	.key_size = sizeof(struct flow_key),
 	.value_size = sizeof(struct flow),
@@ -123,7 +123,7 @@ static void fill_key(struct __sk_buff *skb, struct flow_key *key)
 	}
 }
 
-SOCKET("test")
+SOCKET(test)
 int bpf_test(struct __sk_buff *skb)
 {
 	if (skb->pkt_type != PACKET_OUTGOING)

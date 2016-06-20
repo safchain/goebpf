@@ -33,7 +33,7 @@ func main() {
 	for i := 0; i != 50; i++ {
 		value := make([]byte, 300)
 
-		b.Map("second").Lookup([]byte("abc"), value)
+		b.Map("my_map2").Lookup([]byte("abc"), value)
 		fmt.Printf("Second map value: %v\n", value)
 
 		time.Sleep(1 * time.Second)

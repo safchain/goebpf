@@ -19,8 +19,8 @@ typedef struct bpf_map_def {
 /* helper marcro to define a map, socket, kprobe section in the
  * eBPF elf file.
  */
-#define MAP(NAME) __attribute__((section("maps/"NAME), used))
-#define SOCKET(NAME) __attribute__((section("sockets/"NAME), used))
+#define MAP(NAME) struct bpf_map_def __attribute__((section("maps/"#NAME), used)) NAME =
+#define SOCKET(NAME) __attribute__((section("sockets/"#NAME), used))
 #define LICENSE SEC("license")
 
 /* llvm built-in functions */

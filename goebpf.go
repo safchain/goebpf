@@ -584,6 +584,11 @@ func (b *BPFProg) Map(name string) *BPFMap {
 	return b.maps[name]
 }
 
+// Maps returns a map of BPFMap indexed by their name
+func (b *BPFProg) Maps() map[string]*BPFMap {
+	return b.maps
+}
+
 // Load loads the elf eBPF binary
 func (b *BPFProg) Load() error {
 	if err := b.load(); err != nil {

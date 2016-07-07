@@ -40,18 +40,19 @@ func main() {
 
 	fmt.Println(string(b.Log()))
 
+	fmt.Println(b.Maps())
+
 	_, err = b.Attach("wlp4s0")
 	if err != nil {
 		panic(err)
 	}
 
 	var start int64
+	flow := C.struct_flow{}
 
 	for {
 		var info syscall.Sysinfo_t
 		syscall.Sysinfo(&info)
-
-		flow := C.struct_flow{}
 
 		count := 0
 

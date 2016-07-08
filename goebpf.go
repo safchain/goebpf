@@ -31,6 +31,7 @@ package goebpf
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 #include <sys/socket.h>
 #include <linux/unistd.h>
 #include <linux/bpf.h>
@@ -45,6 +46,14 @@ typedef struct bpf_map {
 	int         fd;
 	bpf_map_def def;
 } bpf_map;
+
+static __u64 time_get_ns(void)
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec * 1000000000ull + ts.tv_nsec;
+}
 
 static __u64 ptr_to_u64(void *ptr)
 {
@@ -128,7 +137,7 @@ static int bpf_prog_load(enum bpf_prog_type prog_type,
 	return syscall(__NR_bpf, BPF_PROG_LOAD, &attr, sizeof(attr));
 }
 
-int bpf_delete_element(int fd, void *key)
+static int bpf_delete_element(int fd, void *key)
 {
 	union bpf_attr attr = {
 		.map_fd = fd,
@@ -138,7 +147,7 @@ int bpf_delete_element(int fd, void *key)
 	return syscall(__NR_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr)) == 0;
 }
 
-int bpf_get_next_key(int fd, void *key, void *next_key)
+static int bpf_get_next_key(int fd, void *key, void *next_key)
 {
 	union bpf_attr attr = {
 		.map_fd = fd,
@@ -149,7 +158,7 @@ int bpf_get_next_key(int fd, void *key, void *next_key)
 	return syscall(__NR_bpf, BPF_MAP_GET_NEXT_KEY, &attr, sizeof(attr)) == 0;
 }
 
-int bpf_lookup_element(int fd, void *key, void *value)
+static int bpf_lookup_element(int fd, void *key, void *value)
 {
 	union bpf_attr attr = {
 		.map_fd = fd,
@@ -160,7 +169,7 @@ int bpf_lookup_element(int fd, void *key, void *value)
 	return syscall(__NR_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr)) == 0;
 }
 
-int open_raw_sock(const char *name)
+static int open_raw_sock(const char *name)
 {
 	struct sockaddr_ll sll;
 	int fd;
@@ -235,6 +244,10 @@ type BPFProg struct {
 	verifierLogLevel      int
 	mapsDefaultMaxEntries int
 	mapsMaxEntries        map[string]int
+}
+
+func GetTimeMonotonicNs() uint64 {
+	return uint64(C.time_get_ns())
 }
 
 // Release releases the memory allocated by a BPFProg.

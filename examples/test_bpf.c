@@ -26,7 +26,7 @@ MAP(my_map2) {
 SOCKET(test)
 int bpf_test(struct __sk_buff *skb)
 {
-	int index = load_byte(skb, ETH_HLEN + offsetof(struct iphdr, protocol));
+	uint32_t index = 44;
 	char key[4] = "abc";
 	long *value1, *value2;
 
@@ -34,8 +34,10 @@ int bpf_test(struct __sk_buff *skb)
 		return 0;
 
 	value1 = bpf_map_lookup_element(&my_map1, &index);
-  if (value1)
-		__sync_fetch_and_add(value1, skb->len);
+  if (value1 != NULL && *value1 == 0) {
+		long v = 778;
+		bpf_map_update_element(&my_map1, &index, &v, BPF_ANY);
+  }
 
 	value2 = bpf_map_lookup_element(&my_map2, key);
 	if (value2)
